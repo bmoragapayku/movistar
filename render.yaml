@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: movistar-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: GOOGLE_AUTH_URL
+        value: https://www.googleapis.com/oauth2/v3/userinfo
+      - key: CORS_ORIGIN
+        value: https://bmoragapayku.github.io
+      - key: MAIL_FROM
+        value: Movistar Arena <onboarding@resend.dev>
+      - key: MOVISTAR_SESSION_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
