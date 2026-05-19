@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movistar Arena · Login Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    :root { --primary:#310065; --accent:#00A8A8; --ink:#1d1a21; --muted:#625b6a; --line:#ded5e6; }
+    body { margin:0; min-height:100vh; font-family:Manrope, sans-serif; background:linear-gradient(180deg,#f7f1fb 0%,#fff 46%,#f6faf9 100%); color:var(--ink); }
+    .font-headline { font-family:"Plus Jakarta Sans", sans-serif; }
+    .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; }
+    .shell { min-height:100vh; display:grid; place-items:center; padding:24px; }
+    .panel { width:100%; max-width:440px; background:white; border:1px solid rgba(222,213,230,.95); border-radius:8px; box-shadow:0 24px 70px rgba(49,0,101,.12); }
+    .field { width:100%; border:1px solid var(--line); border-radius:8px; padding:12px 13px; outline:none; background:#fff; font-size:14px; }
+    .field:focus { border-color:#7d4bb2; box-shadow:0 0 0 3px rgba(49,0,101,.09); }
+    .btn { display:inline-flex; width:100%; align-items:center; justify-content:center; gap:8px; border-radius:8px; padding:12px 14px; font-size:14px; font-weight:800; transition:.16s ease; white-space:nowrap; background:var(--primary); color:white; }
+    .btn:disabled { opacity:.55; cursor:not-allowed; }
+    .btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 12px 24px rgba(49,0,101,.18); }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel p-6 sm:p-8">
+      <div class="mb-7">
+        <img src="https://dashboard.payku.com/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FlogoPayku.0gqfe29cr2epv.png&w=640&q=75" alt="Payku" class="h-8 w-auto mb-5">
+        <p class="text-xs font-extrabold uppercase tracking-[.18em] text-[#008f8f] mb-2">Acceso administrador</p>
+        <h1 class="font-headline text-2xl font-extrabold text-[#310065]">Movistar Arena</h1>
+        <p class="mt-2 text-sm text-[#625b6a]">Ingresa para administrar eventos, trabajadores, ranking y asignaciones.</p>
+      </div>
+
+      <form id="login-form" class="grid gap-4">
+        <div>
+          <label class="block text-xs font-extrabold uppercase tracking-widest text-[#625b6a] mb-2">Correo</label>
+          <input id="email" type="email" class="field" autocomplete="username" placeholder="correo@payku.com" required>
+        </div>
+        <div>
+          <label class="block text-xs font-extrabold uppercase tracking-widest text-[#625b6a] mb-2">Contraseña</label>
+          <input id="password" type="password" class="field" autocomplete="current-password" placeholder="Contraseña" required>
+        </div>
+        <div id="error" class="hidden rounded-lg border border-[#fecaca] bg-[#fef2f2] p-3 text-sm font-bold text-[#ba1a1a]"></div>
+        <button id="login-btn" class="btn" type="submit">
+          <span class="material-symbols-outlined text-lg">login</span>Entrar
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const SUPABASE_URL = 'https://wlkwvzwxshbkwyeyhncd.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsa3d2end4c2hia3d5ZXlobmNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTExODgsImV4cCI6MjA5MTkyNzE4OH0.6w0wyItdfgBUxwdhSL5rSjRG51AA_-in82Sr6unp0VQ';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const ADMIN_SESSION_KEY = 'paykuMovistarAdminSession';
+
+    function nextUrl() {
+      const params = new URLSearchParams(location.search);
+      const next = params.get('next') || 'admin.html';
+      if (next.startsWith('http') || next.startsWith('//')) return 'admin.html';
+      return next;
+    }
+
+    function showError(message) {
+      const el = document.getElementById('error');
+      el.textContent = message;
+      el.classList.remove('hidden');
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const btn = document.getElementById('login-btn');
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      document.getElementById('error').classList.add('hidden');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined text-lg">hourglass_top</span>Validando';
+
+      try {
+        const { data, error } = await db.rpc('movistar_admin_login', { p_email: email, p_password: password });
+        if (error) throw error;
+        const result = Array.isArray(data) ? data[0] : data;
+        if (!result?.ok || !result?.token) {
+          showError(result?.message || 'Credenciales inválidas.');
+          return;
+        }
+        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+          token: result.token,
+          email: result.email,
+          expires_at: result.expires_at
+        }));
+        window.location.href = nextUrl();
+      } catch (error) {
+        showError(error.message || 'No se pudo iniciar sesión.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined text-lg">login</span>Entrar';
+      }
+    });
+  </script>
+</body>
+</html>

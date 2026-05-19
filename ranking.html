@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movistar Arena · Ranking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    :root { --primary:#310065; --accent:#00A8A8; --ink:#1d1a21; --muted:#625b6a; --line:#ded5e6; --bg:#faf7fc; --panel:#ffffff; }
+    body { margin:0; font-family:Manrope, sans-serif; background:#faf7fc; color:var(--ink); }
+    .font-headline { font-family:"Plus Jakarta Sans", sans-serif; }
+    .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; }
+    .shell { max-width:1180px; margin:0 auto; padding:0 20px; }
+    .topbar { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(222,213,230,.75); }
+    .nav-link { display:inline-flex; align-items:center; gap:7px; padding:10px 12px; border-radius:8px; color:#473d50; font-size:13px; font-weight:800; text-decoration:none; }
+    .nav-link:hover, .nav-link.active { background:#f0e8f5; color:var(--primary); }
+    .panel { background:white; border:1px solid rgba(222,213,230,.95); border-radius:8px; box-shadow:0 18px 50px rgba(49,0,101,.06); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:800; transition:.16s ease; white-space:nowrap; }
+    .btn-primary { background:var(--primary); color:white; }
+    .btn-primary:hover { transform:translateY(-1px); box-shadow:0 12px 24px rgba(49,0,101,.18); }
+    .btn-ghost { border:1px solid var(--line); color:#473d50; background:white; }
+    .btn-ghost:hover { background:#f7f2fa; }
+    .field { width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 11px; outline:none; background:#fff; font-size:13px; }
+    .field:focus { border-color:#7d4bb2; box-shadow:0 0 0 3px rgba(49,0,101,.09); }
+    .metric { border:1px solid var(--line); border-radius:8px; background:#fff; padding:16px; }
+    .rank-card { border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg,#fff,#fbf8ff); padding:18px; min-height:178px; }
+    .rank-badge { width:38px; height:38px; border-radius:8px; display:grid; place-items:center; background:#310065; color:white; font-weight:900; }
+    .rank-badge.second { background:#008f8f; }
+    .rank-badge.third { background:#d97706; }
+    .bar { height:9px; border-radius:999px; background:#eee7f3; overflow:hidden; }
+    .bar > span { display:block; height:100%; background:#00a8a8; }
+    .table-wrap { overflow-x:auto; border-radius:8px; border:1px solid var(--line); }
+    table { width:100%; min-width:900px; border-collapse:collapse; background:white; }
+    th { background:#f3eef7; color:#53475d; font-size:11px; text-transform:uppercase; letter-spacing:.08em; text-align:left; padding:12px; }
+    td { border-top:1px solid #eee7f3; padding:12px; font-size:13px; vertical-align:middle; }
+    tr:hover td { background:#fcf8ff; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:800; color:#53475d; background:#f3eef7; }
+    .toast { position:fixed; right:18px; bottom:18px; max-width:380px; z-index:30; border-radius:8px; padding:13px 14px; box-shadow:0 18px 45px rgba(20,10,30,.18); font-size:13px; font-weight:800; display:none; }
+    .toast.show { display:block; }
+    .toast.err { background:#fef2f2; color:#ba1a1a; border:1px solid #fecaca; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <div class="shell flex flex-wrap items-center justify-between gap-3 py-3">
+      <a href="index.html" class="flex items-center gap-3 no-underline">
+        <img src="https://dashboard.payku.com/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FlogoPayku.0gqfe29cr2epv.png&w=640&q=75" alt="Payku" class="h-7 w-auto">
+        <span class="font-headline text-sm font-extrabold text-[#310065]">Movistar Arena</span>
+      </a>
+      <div class="flex flex-wrap gap-1">
+        <a class="nav-link" href="eventos.html"><span class="material-symbols-outlined text-base">event</span>Eventos</a>
+        <a class="nav-link" href="trabajadores.html"><span class="material-symbols-outlined text-base">groups</span>Trabajadores</a>
+        <a class="nav-link" href="index.html"><span class="material-symbols-outlined text-base">confirmation_number</span>Registro</a>
+        <a class="nav-link active" href="ranking.html"><span class="material-symbols-outlined text-base">leaderboard</span>Ranking</a>
+        <a class="nav-link" href="admin.html"><span class="material-symbols-outlined text-base">tune</span>Admin</a>
+        <button class="nav-link border-0 bg-transparent cursor-pointer" type="button" onclick="logoutAdmin()"><span class="material-symbols-outlined text-base">logout</span>Salir</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="shell py-7">
+    <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 mb-5">
+      <div>
+        <p class="text-xs font-extrabold uppercase tracking-[.18em] text-[#008f8f] mb-2">Ranking</p>
+        <h1 class="font-headline text-3xl font-extrabold text-[#310065]">Trabajadores que más solicitan entradas</h1>
+        <p class="mt-2 text-sm text-[#625b6a] max-w-3xl">Vista ordenada por entradas solicitadas en solicitudes activas. Puedes revisar el mes actual o el historial completo.</p>
+      </div>
+      <div class="panel p-3 flex flex-wrap items-center gap-2">
+        <select id="scope-filter" class="field w-full sm:w-36" onchange="handleScopeChange()">
+          <option value="month">Por mes</option>
+          <option value="all">Todos</option>
+        </select>
+        <button id="prev-month" class="btn btn-ghost" onclick="shiftMonth(-1)"><span class="material-symbols-outlined text-base">chevron_left</span></button>
+        <input id="month-filter" type="month" class="field w-auto min-w-[170px]" onchange="renderRanking()">
+        <button id="next-month" class="btn btn-ghost" onclick="shiftMonth(1)"><span class="material-symbols-outlined text-base">chevron_right</span></button>
+        <input id="worker-search" type="search" class="field w-full sm:w-56" placeholder="Buscar trabajador..." oninput="renderRanking()">
+        <button class="btn btn-primary" onclick="loadRanking()"><span class="material-symbols-outlined text-base">refresh</span>Actualizar</button>
+      </div>
+    </div>
+
+    <section class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div class="metric"><p class="text-xs font-extrabold uppercase tracking-widest text-[#625b6a]">Trabajadores</p><p id="m-workers" class="mt-2 text-3xl font-extrabold text-[#310065]">...</p></div>
+      <div class="metric"><p class="text-xs font-extrabold uppercase tracking-widest text-[#625b6a]">Entradas solicitadas</p><p id="m-requested" class="mt-2 text-3xl font-extrabold text-[#008f8f]">...</p></div>
+      <div class="metric"><p class="text-xs font-extrabold uppercase tracking-widest text-[#625b6a]">Eventos distintos</p><p id="m-events" class="mt-2 text-3xl font-extrabold text-[#6b4eff]">...</p></div>
+      <div class="metric"><p class="text-xs font-extrabold uppercase tracking-widest text-[#625b6a]">Entradas asignadas</p><p id="m-assigned" class="mt-2 text-3xl font-extrabold text-[#d97706]">...</p></div>
+    </section>
+
+    <section id="top-three" class="grid lg:grid-cols-3 gap-4 mb-5"></section>
+
+    <section class="panel p-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h2 class="font-headline text-lg font-extrabold text-[#310065]">Detalle del ranking</h2>
+          <p id="ranking-count" class="text-sm text-[#625b6a] mt-1">Cargando...</p>
+        </div>
+      </div>
+      <div id="ranking-table"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const SUPABASE_URL = 'https://wlkwvzwxshbkwyeyhncd.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsa3d2end4c2hia3d5ZXlobmNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTExODgsImV4cCI6MjA5MTkyNzE4OH0.6w0wyItdfgBUxwdhSL5rSjRG51AA_-in82Sr6unp0VQ';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const ADMIN_SESSION_KEY = 'paykuMovistarAdminSession';
+    let allRequests = [];
+
+    function currentPageTarget() {
+      return `${location.pathname.split('/').pop() || 'admin.html'}${location.search || ''}`;
+    }
+
+    function redirectToLogin() {
+      window.location.href = `login.html?next=${encodeURIComponent(currentPageTarget())}`;
+    }
+
+    function getAdminSession() {
+      try {
+        return JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY) || 'null');
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function requireAdmin() {
+      const session = getAdminSession();
+      if (!session?.token || (session.expires_at && new Date(session.expires_at) <= new Date())) {
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        redirectToLogin();
+        return false;
+      }
+      const { data, error } = await db.rpc('movistar_admin_check_session', { p_token: session.token });
+      const result = Array.isArray(data) ? data[0] : data;
+      if (error || !result?.ok) {
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        redirectToLogin();
+        return false;
+      }
+      return true;
+    }
+
+    async function logoutAdmin() {
+      const session = getAdminSession();
+      try {
+        if (session?.token) await db.rpc('movistar_admin_logout', { p_token: session.token });
+      } catch (_) {}
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+      redirectToLogin();
+    }
+
+    function esc(value) {
+      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function toast(message) {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.className = 'toast show err';
+      setTimeout(() => el.classList.remove('show'), 3400);
+    }
+
+    function normalizeText(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    function currentMonth() {
+      const now = new Date();
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 7);
+    }
+
+    function monthBounds(value) {
+      const [year, month] = value.split('-').map(Number);
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const next = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      return { from, next };
+    }
+
+    function monthLabel(value) {
+      const [year, month] = value.split('-').map(Number);
+      if (!year || !month) return 'Mes actual';
+      return new Date(year, month - 1, 1).toLocaleDateString('es-CL', { month:'long', year:'numeric' });
+    }
+
+    function shiftMonth(delta) {
+      const input = document.getElementById('month-filter');
+      const [year, month] = (input.value || currentMonth()).split('-').map(Number);
+      const date = new Date(year, month - 1 + delta, 1);
+      input.value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      renderRanking();
+    }
+
+    function handleScopeChange() {
+      const isAll = document.getElementById('scope-filter').value === 'all';
+      ['prev-month', 'month-filter', 'next-month'].forEach(id => {
+        document.getElementById(id).disabled = isAll;
+      });
+      renderRanking();
+    }
+
+    function scopedRequests() {
+      const scope = document.getElementById('scope-filter').value;
+      const month = document.getElementById('month-filter').value || currentMonth();
+      const bounds = monthBounds(month);
+      return allRequests.filter(row => {
+        if (!row.event || row.event.is_cancelled) return false;
+        if (scope === 'all') return true;
+        return row.event.event_date >= bounds.from && row.event.event_date < bounds.next;
+      });
+    }
+
+    function buildRanking() {
+      const search = normalizeText(document.getElementById('worker-search').value);
+      const map = new Map();
+      scopedRequests().forEach(row => {
+        const workerId = row.worker_id || row.worker?.id || 'sin-id';
+        const name = row.worker?.name || 'Sin trabajador';
+        if (!map.has(workerId)) {
+          map.set(workerId, {
+            workerId,
+            name,
+            requestedTickets: 0,
+            requestedParkings: 0,
+            assignedTickets: 0,
+            assignedParkings: 0,
+            requests: 0,
+            events: new Set()
+          });
+        }
+        const item = map.get(workerId);
+        item.requestedTickets += Number(row.requested_tickets) || 0;
+        item.requestedParkings += Number(row.requested_parkings) || 0;
+        item.assignedTickets += Number(row.assigned_tickets) || 0;
+        item.assignedParkings += Number(row.assigned_parkings) || 0;
+        item.requests += 1;
+        if (row.event_id) item.events.add(row.event_id);
+      });
+
+      return [...map.values()]
+        .map(item => ({ ...item, eventsCount: item.events.size }))
+        .filter(item => !search || normalizeText(item.name).includes(search))
+        .sort((a, b) => b.requestedTickets - a.requestedTickets || b.eventsCount - a.eventsCount || a.name.localeCompare(b.name, 'es'));
+    }
+
+    function renderMetrics(ranking) {
+      const eventIds = new Set();
+      scopedRequests().forEach(row => {
+        const workerName = row.worker?.name || '';
+        const search = normalizeText(document.getElementById('worker-search').value);
+        if (!search || normalizeText(workerName).includes(search)) eventIds.add(row.event_id);
+      });
+      document.getElementById('m-workers').textContent = ranking.length;
+      document.getElementById('m-requested').textContent = ranking.reduce((total, item) => total + item.requestedTickets, 0);
+      document.getElementById('m-events').textContent = eventIds.size;
+      document.getElementById('m-assigned').textContent = ranking.reduce((total, item) => total + item.assignedTickets, 0);
+    }
+
+    function renderTopThree(ranking) {
+      const wrap = document.getElementById('top-three');
+      const top = ranking.slice(0, 3);
+      if (!top.length) {
+        wrap.innerHTML = '';
+        return;
+      }
+      const max = Math.max(1, top[0].requestedTickets);
+      wrap.innerHTML = top.map((item, index) => {
+        const badge = index === 1 ? 'second' : index === 2 ? 'third' : '';
+        const pct = Math.round((item.requestedTickets / max) * 100);
+        return `
+          <article class="rank-card">
+            <div class="flex items-start justify-between gap-3">
+              <div class="rank-badge ${badge}">#${index + 1}</div>
+              <span class="pill">${item.eventsCount} eventos</span>
+            </div>
+            <h3 class="font-headline text-xl font-extrabold text-[#310065] mt-4">${esc(item.name)}</h3>
+            <p class="text-sm text-[#625b6a] mt-1">${item.requestedTickets} entradas solicitadas · ${item.requestedParkings} estacionamientos</p>
+            <div class="bar mt-4"><span style="width:${pct}%"></span></div>
+            <p class="text-xs font-bold text-[#625b6a] mt-3">${item.assignedTickets} entradas asignadas por admin</p>
+          </article>`;
+      }).join('');
+    }
+
+    function renderTable(ranking) {
+      const scope = document.getElementById('scope-filter').value;
+      const label = scope === 'all' ? 'todos los meses' : monthLabel(document.getElementById('month-filter').value || currentMonth());
+      document.getElementById('ranking-count').textContent = `${ranking.length} trabajadores · ${label}`;
+      const target = document.getElementById('ranking-table');
+      if (!ranking.length) {
+        target.innerHTML = '<div class="rounded-lg border border-dashed border-[#ded5e6] p-5 text-sm text-[#625b6a]">No hay solicitudes activas para mostrar en este filtro.</div>';
+        return;
+      }
+      const max = Math.max(1, ranking[0].requestedTickets);
+      target.innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Trabajador</th>
+                <th>Entradas solicitadas</th>
+                <th>Eventos</th>
+                <th>Estac. solicitados</th>
+                <th>Entradas asignadas</th>
+                <th>Estac. asignados</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ranking.map((item, index) => {
+                const pct = Math.round((item.requestedTickets / max) * 100);
+                return `
+                  <tr>
+                    <td class="font-extrabold text-[#310065]">#${index + 1}</td>
+                    <td class="font-bold text-[#310065]">${esc(item.name)}</td>
+                    <td>
+                      <div class="font-extrabold text-[#1d1a21]">${item.requestedTickets}</div>
+                      <div class="bar mt-2 max-w-[240px]"><span style="width:${pct}%"></span></div>
+                    </td>
+                    <td>${item.eventsCount}</td>
+                    <td>${item.requestedParkings}</td>
+                    <td>${item.assignedTickets}</td>
+                    <td>${item.assignedParkings}</td>
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderRanking() {
+      const ranking = buildRanking();
+      renderMetrics(ranking);
+      renderTopThree(ranking);
+      renderTable(ranking);
+    }
+
+    async function loadRanking() {
+      document.getElementById('ranking-table').innerHTML = '<div class="text-sm text-[#625b6a]">Cargando ranking...</div>';
+      try {
+        const { data, error } = await db
+          .from('movistar_invitation_requests')
+          .select('id,event_id,worker_id,requested_tickets,requested_parkings,assigned_tickets,assigned_parkings,status,created_at,worker:movistar_workers(id,name),event:movistar_events(id,event_date,event_name,start_time,is_cancelled)')
+          .eq('status', 'active');
+        if (error) throw error;
+        allRequests = data || [];
+        renderRanking();
+      } catch (error) {
+        toast(error.message || 'No se pudo cargar el ranking.');
+        document.getElementById('ranking-table').innerHTML = `<div class="rounded-lg border border-[#fecaca] bg-[#fef2f2] p-5 text-sm font-bold text-[#ba1a1a]">Error: ${esc(error.message)}</div>`;
+      }
+    }
+
+    requireAdmin().then(ok => {
+      if (!ok) return;
+      document.getElementById('month-filter').value = currentMonth();
+      handleScopeChange();
+      loadRanking();
+    });
+  </script>
+</body>
+</html>

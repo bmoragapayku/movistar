@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movistar Arena · Eventos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root { --primary:#310065; --accent:#00A8A8; --ink:#1d1a21; --muted:#625b6a; --line:#ded5e6; --bg:#faf7fc; --panel:#ffffff; }
+    body { margin:0; font-family:Manrope, sans-serif; background:#faf7fc; color:var(--ink); }
+    .font-headline { font-family:"Plus Jakarta Sans", sans-serif; }
+    .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; }
+    .shell { max-width:1180px; margin:0 auto; padding:0 20px; }
+    .topbar { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(222,213,230,.75); }
+    .nav-link { display:inline-flex; align-items:center; gap:7px; padding:10px 12px; border-radius:8px; color:#473d50; font-size:13px; font-weight:800; text-decoration:none; }
+    .nav-link:hover, .nav-link.active { background:#f0e8f5; color:var(--primary); }
+    .panel { background:white; border:1px solid rgba(222,213,230,.95); border-radius:8px; box-shadow:0 18px 50px rgba(49,0,101,.06); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:8px; padding:11px 14px; font-size:13px; font-weight:800; transition:.16s ease; white-space:nowrap; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; transform:none; box-shadow:none; }
+    .btn-primary { background:var(--primary); color:white; }
+    .btn-primary:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 12px 24px rgba(49,0,101,.18); }
+    .btn-ghost { border:1px solid var(--line); color:#473d50; background:white; }
+    .btn-ghost:hover { background:#f7f2fa; }
+    .field { width:100%; border:1px solid var(--line); border-radius:8px; padding:11px 12px; outline:none; background:#fff; font-size:14px; }
+    .field:focus { border-color:#7d4bb2; box-shadow:0 0 0 3px rgba(49,0,101,.09); }
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:800; }
+    .pill-ok { color:#047857; background:#dcfce7; }
+    .pill-bad { color:#ba1a1a; background:#fee2e2; }
+    .table-wrap { overflow-x:auto; border-radius:8px; border:1px solid var(--line); }
+    table { width:100%; min-width:820px; border-collapse:collapse; background:white; }
+    th { background:#f3eef7; color:#53475d; font-size:11px; text-transform:uppercase; letter-spacing:.08em; text-align:left; padding:12px; }
+    td { border-top:1px solid #eee7f3; padding:12px; font-size:13px; vertical-align:middle; }
+    tr:hover td { background:#fcf8ff; }
+    .toast { position:fixed; right:18px; bottom:18px; max-width:360px; z-index:30; border-radius:8px; padding:13px 14px; box-shadow:0 18px 45px rgba(20,10,30,.18); font-size:13px; font-weight:800; display:none; }
+    .toast.show { display:block; }
+    .toast.ok { background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; }
+    .toast.err { background:#fef2f2; color:#ba1a1a; border:1px solid #fecaca; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <div class="shell flex flex-wrap items-center justify-between gap-3 py-3">
+      <a href="index.html" class="flex items-center gap-3 no-underline">
+        <img src="https://dashboard.payku.com/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FlogoPayku.0gqfe29cr2epv.png&w=640&q=75" alt="Payku" class="h-7 w-auto">
+        <span class="font-headline text-sm font-extrabold text-[#310065]">Movistar Arena</span>
+      </a>
+      <div class="flex flex-wrap gap-1">
+        <a class="nav-link active" href="eventos.html"><span class="material-symbols-outlined text-base">event</span>Eventos</a>
+        <a class="nav-link" href="trabajadores.html"><span class="material-symbols-outlined text-base">groups</span>Trabajadores</a>
+        <a class="nav-link" href="index.html"><span class="material-symbols-outlined text-base">confirmation_number</span>Registro</a>
+        <a class="nav-link" href="ranking.html"><span class="material-symbols-outlined text-base">leaderboard</span>Ranking</a>
+        <a class="nav-link" href="admin.html"><span class="material-symbols-outlined text-base">tune</span>Admin</a>
+        <button class="nav-link border-0 bg-transparent cursor-pointer" type="button" onclick="logoutAdmin()"><span class="material-symbols-outlined text-base">logout</span>Salir</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="shell py-7">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+      <div>
+        <p class="text-xs font-extrabold uppercase tracking-[.18em] text-[#008f8f] mb-2">Importador</p>
+        <h1 class="font-headline text-3xl font-extrabold text-[#310065]">Eventos Movistar Arena</h1>
+        <p class="mt-2 text-sm text-[#625b6a] max-w-2xl">Carga el XLSX con columnas FECHA, NOMBRE EVENTO e INICIO. Si vuelves a importar el mismo archivo, solo se insertan los eventos faltantes.</p>
+      </div>
+      <button class="btn btn-ghost" onclick="loadEvents()"><span class="material-symbols-outlined text-lg">refresh</span>Actualizar</button>
+    </div>
+
+    <section class="grid lg:grid-cols-[1.2fr_.8fr] gap-4 mb-5">
+      <div class="panel p-5">
+        <h2 class="font-headline text-lg font-extrabold text-[#310065] mb-4">Importar XLSX</h2>
+        <div class="flex flex-col md:flex-row gap-3">
+          <input id="event-file" type="file" accept=".xlsx,.xls" class="field">
+          <button id="import-btn" class="btn btn-primary" onclick="importEvents()"><span class="material-symbols-outlined text-lg">upload_file</span>Importar eventos</button>
+        </div>
+        <div id="import-result" class="mt-4 hidden rounded-lg border border-[#ded5e6] bg-[#fbf8ff] p-4 text-sm text-[#473d50]"></div>
+      </div>
+
+      <div class="panel p-5">
+        <h2 class="font-headline text-lg font-extrabold text-[#310065] mb-4">Agregar manual</h2>
+        <div class="grid gap-3">
+          <input id="manual-date" type="date" class="field">
+          <input id="manual-name" type="text" class="field" placeholder="Nombre del evento">
+          <input id="manual-time" type="text" class="field" placeholder="Inicio, ej: 21:00 HRS">
+          <button class="btn btn-primary w-full" onclick="addManualEvent()"><span class="material-symbols-outlined text-lg">add</span>Guardar evento</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel p-5">
+      <div class="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-3 mb-4">
+        <div>
+          <h2 class="font-headline text-lg font-extrabold text-[#310065]">Eventos cargados</h2>
+          <p id="event-count" class="text-sm text-[#625b6a] mt-1">Cargando...</p>
+        </div>
+        <div class="grid sm:grid-cols-[150px_1fr_auto_auto_auto] gap-2 w-full xl:w-auto">
+          <select id="scope-filter" class="field" onchange="handleScopeChange()">
+            <option value="month">Por mes</option>
+            <option value="all">Todos</option>
+          </select>
+          <input id="month-filter" type="month" class="field" onchange="renderEvents()">
+          <button id="prev-month" class="btn btn-ghost" onclick="shiftMonth(-1)" title="Mes anterior"><span class="material-symbols-outlined text-base">chevron_left</span></button>
+          <button id="current-month" class="btn btn-ghost" onclick="resetCurrentMonth()">Mes actual</button>
+          <button id="next-month" class="btn btn-ghost" onclick="shiftMonth(1)" title="Mes siguiente"><span class="material-symbols-outlined text-base">chevron_right</span></button>
+          <input id="search" type="search" class="field sm:col-span-5" placeholder="Buscar evento..." oninput="renderEvents()">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Evento</th>
+              <th>Inicio</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="events-body">
+            <tr><td colspan="5" class="text-[#625b6a]">Cargando eventos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const SUPABASE_URL = 'https://wlkwvzwxshbkwyeyhncd.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsa3d2end4c2hia3d5ZXlobmNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTExODgsImV4cCI6MjA5MTkyNzE4OH0.6w0wyItdfgBUxwdhSL5rSjRG51AA_-in82Sr6unp0VQ';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const ADMIN_SESSION_KEY = 'paykuMovistarAdminSession';
+    let events = [];
+
+    function currentPageTarget() {
+      return `${location.pathname.split('/').pop() || 'admin.html'}${location.search || ''}`;
+    }
+
+    function redirectToLogin() {
+      window.location.href = `login.html?next=${encodeURIComponent(currentPageTarget())}`;
+    }
+
+    function getAdminSession() {
+      try {
+        return JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY) || 'null');
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function requireAdmin() {
+      const session = getAdminSession();
+      if (!session?.token || (session.expires_at && new Date(session.expires_at) <= new Date())) {
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        redirectToLogin();
+        return false;
+      }
+      const { data, error } = await db.rpc('movistar_admin_check_session', { p_token: session.token });
+      const result = Array.isArray(data) ? data[0] : data;
+      if (error || !result?.ok) {
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        redirectToLogin();
+        return false;
+      }
+      return true;
+    }
+
+    async function logoutAdmin() {
+      const session = getAdminSession();
+      try {
+        if (session?.token) await db.rpc('movistar_admin_logout', { p_token: session.token });
+      } catch (_) {}
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+      redirectToLogin();
+    }
+
+    function esc(value) {
+      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function toast(message, type = 'ok') {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.className = `toast show ${type}`;
+      setTimeout(() => el.classList.remove('show'), 3200);
+    }
+
+    function normalizeText(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    function eventKey(date, name, time) {
+      return `${date}|${normalizeText(name)}|${normalizeText(time)}`;
+    }
+
+    function excelDateToIso(value) {
+      if (value instanceof Date && !Number.isNaN(value.valueOf())) return value.toISOString().slice(0, 10);
+      const raw = String(value ?? '').trim();
+      if (!raw) return '';
+      const numeric = Number(raw.replace(',', '.'));
+      if (Number.isFinite(numeric) && numeric > 20000 && numeric < 80000) {
+        const date = new Date(Date.UTC(1899, 11, 30) + numeric * 86400000);
+        return date.toISOString().slice(0, 10);
+      }
+      let match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (match) return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+      match = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+      if (match) {
+        const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+        return `${year}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+      }
+      return '';
+    }
+
+    function normalizeTime(value) {
+      if (typeof value === 'number' && value > 0 && value < 1) {
+        const minutes = Math.round(value * 24 * 60);
+        return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')} HRS`;
+      }
+      const raw = String(value ?? '').trim();
+      if (!raw || normalizeText(raw).includes('CONFIRMAR')) return 'POR CONFIRMAR';
+      const match = raw.match(/(\d{1,2})[:.](\d{2})/);
+      if (match) return `${match[1].padStart(2, '0')}:${match[2]} HRS`;
+      const hour = raw.match(/^(\d{1,2})$/);
+      if (hour) return `${hour[1].padStart(2, '0')}:00 HRS`;
+      return raw.replace(/\s+/g, ' ');
+    }
+
+    function formatDate(iso) {
+      return new Date(`${iso}T12:00:00`).toLocaleDateString('es-CL', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+    }
+
+    function currentMonth() {
+      const now = new Date();
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 7);
+    }
+
+    function monthLabel(value) {
+      const [year, month] = value.split('-').map(Number);
+      if (!year || !month) return 'Mes actual';
+      return new Date(year, month - 1, 1).toLocaleDateString('es-CL', { month:'long', year:'numeric' });
+    }
+
+    function shiftMonth(delta) {
+      const input = document.getElementById('month-filter');
+      const [year, month] = (input.value || currentMonth()).split('-').map(Number);
+      const date = new Date(year, month - 1 + delta, 1);
+      input.value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      renderEvents();
+    }
+
+    function resetCurrentMonth() {
+      document.getElementById('month-filter').value = currentMonth();
+      document.getElementById('scope-filter').value = 'month';
+      handleScopeChange();
+    }
+
+    function handleScopeChange() {
+      const isAll = document.getElementById('scope-filter').value === 'all';
+      ['month-filter', 'prev-month', 'current-month', 'next-month'].forEach(id => {
+        document.getElementById(id).disabled = isAll;
+      });
+      renderEvents();
+    }
+
+    async function readWorkbookRows(file) {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type:'array', cellDates:false });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      return XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'' });
+    }
+
+    function parseEventRows(rows) {
+      const headerIndex = rows.findIndex(row => {
+        const headers = row.map(normalizeText);
+        return headers.some(h => h === 'FECHA') && headers.some(h => h.includes('NOMBRE EVENTO')) && headers.some(h => h === 'INICIO');
+      });
+      if (headerIndex === -1) throw new Error('No encontré encabezados FECHA, NOMBRE EVENTO e INICIO.');
+
+      const headers = rows[headerIndex].map(normalizeText);
+      const dateIndex = headers.findIndex(h => h === 'FECHA');
+      const nameIndex = headers.findIndex(h => h.includes('NOMBRE EVENTO'));
+      const startIndex = headers.findIndex(h => h === 'INICIO');
+      const parsed = [];
+      const seen = new Set();
+
+      rows.slice(headerIndex + 1).forEach(row => {
+        const event_date = excelDateToIso(row[dateIndex]);
+        const event_name = String(row[nameIndex] || '').trim().replace(/\s+/g, ' ');
+        const start_time = normalizeTime(row[startIndex]);
+        if (!event_date || !event_name) return;
+        const key = eventKey(event_date, event_name, start_time);
+        if (seen.has(key)) return;
+        seen.add(key);
+        parsed.push({ event_key:key, event_date, event_name, start_time });
+      });
+      return parsed;
+    }
+
+    async function importEvents() {
+      const input = document.getElementById('event-file');
+      const result = document.getElementById('import-result');
+      const btn = document.getElementById('import-btn');
+      if (!input.files.length) {
+        toast('Selecciona un archivo XLSX primero.', 'err');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined text-lg">hourglass_top</span>Importando...';
+      result.classList.add('hidden');
+
+      try {
+        const rows = await readWorkbookRows(input.files[0]);
+        const parsed = parseEventRows(rows);
+        if (!parsed.length) throw new Error('El archivo no contiene eventos válidos.');
+
+        const { data: existing, error: readError } = await db.from('movistar_events').select('event_key');
+        if (readError) throw readError;
+        const existingKeys = new Set((existing || []).map(row => row.event_key));
+        const toInsert = parsed.filter(event => !existingKeys.has(event.event_key));
+
+        if (toInsert.length) {
+          const { error } = await db.from('movistar_events').insert(toInsert);
+          if (error) throw error;
+        }
+
+        result.innerHTML = `
+          <div class="grid sm:grid-cols-3 gap-3">
+            <div><strong class="text-[#310065] text-xl">${parsed.length}</strong><br>Total leídos</div>
+            <div><strong class="text-[#047857] text-xl">${toInsert.length}</strong><br>Nuevos cargados</div>
+            <div><strong class="text-[#d97706] text-xl">${parsed.length - toInsert.length}</strong><br>Ya existían</div>
+          </div>`;
+        result.classList.remove('hidden');
+        toast('Importación terminada.');
+        await loadEvents();
+      } catch (error) {
+        console.error(error);
+        toast(error.message || 'No se pudo importar el archivo.', 'err');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined text-lg">upload_file</span>Importar eventos';
+      }
+    }
+
+    async function addManualEvent() {
+      const date = document.getElementById('manual-date').value;
+      const name = document.getElementById('manual-name').value.trim().replace(/\s+/g, ' ');
+      const time = normalizeTime(document.getElementById('manual-time').value);
+      if (!date || !name) {
+        toast('Ingresa fecha y nombre del evento.', 'err');
+        return;
+      }
+      const row = { event_date:date, event_name:name, start_time:time, event_key:eventKey(date, name, time) };
+      try {
+        const { error } = await db.from('movistar_events').insert(row);
+        if (error) {
+          if (`${error.message}`.toLowerCase().includes('duplicate')) throw new Error('Ese evento ya existe.');
+          throw error;
+        }
+        document.getElementById('manual-name').value = '';
+        document.getElementById('manual-time').value = '';
+        toast('Evento guardado.');
+        await loadEvents();
+      } catch (error) {
+        toast(error.message, 'err');
+      }
+    }
+
+    async function toggleCancelled(id) {
+      const event = events.find(item => item.id === id);
+      if (!event) return;
+      try {
+        const { error } = await db.from('movistar_events').update({ is_cancelled: !event.is_cancelled }).eq('id', id);
+        if (error) throw error;
+        event.is_cancelled = !event.is_cancelled;
+        renderEvents();
+        toast(event.is_cancelled ? 'Evento marcado como cancelado.' : 'Evento reactivado.');
+      } catch (error) {
+        toast(error.message, 'err');
+      }
+    }
+
+    async function loadEvents() {
+      const { data, error } = await db.from('movistar_events').select('*').order('event_date', { ascending:true }).order('event_name', { ascending:true });
+      if (error) {
+        document.getElementById('events-body').innerHTML = `<tr><td colspan="5" class="text-[#ba1a1a] font-bold">Error: ${esc(error.message)}</td></tr>`;
+        return;
+      }
+      events = data || [];
+      renderEvents();
+    }
+
+    function renderEvents() {
+      const q = normalizeText(document.getElementById('search').value);
+      const scope = document.getElementById('scope-filter').value;
+      const selectedMonth = document.getElementById('month-filter').value || currentMonth();
+      const filtered = events.filter(event => {
+        const matchesMonth = scope === 'all' || event.event_date.startsWith(selectedMonth);
+        const matchesSearch = !q || normalizeText(`${event.event_name} ${event.start_time} ${event.event_date}`).includes(q);
+        return matchesMonth && matchesSearch;
+      });
+      const scopeLabel = scope === 'all' ? 'Todos los meses' : monthLabel(selectedMonth);
+      document.getElementById('event-count').textContent = `${filtered.length} de ${events.length} eventos · ${scopeLabel}`;
+      const body = document.getElementById('events-body');
+      if (!filtered.length) {
+        body.innerHTML = '<tr><td colspan="5" class="text-[#625b6a]">No hay eventos para mostrar.</td></tr>';
+        return;
+      }
+      body.innerHTML = filtered.map(event => `
+        <tr>
+          <td class="font-bold text-[#310065] whitespace-nowrap">${formatDate(event.event_date)}</td>
+          <td class="font-semibold">${esc(event.event_name)}</td>
+          <td class="text-[#625b6a] whitespace-nowrap">${esc(event.start_time)}</td>
+          <td>${event.is_cancelled ? '<span class="pill pill-bad"><span class="material-symbols-outlined text-sm">cancel</span>Cancelado</span>' : '<span class="pill pill-ok"><span class="material-symbols-outlined text-sm">check_circle</span>Activo</span>'}</td>
+          <td>
+            <button class="btn btn-ghost" onclick="toggleCancelled('${event.id}')">
+              <span class="material-symbols-outlined text-base">${event.is_cancelled ? 'undo' : 'block'}</span>
+              ${event.is_cancelled ? 'Desmarcar' : 'Cancelar'}
+            </button>
+          </td>
+        </tr>`).join('');
+    }
+
+    requireAdmin().then(ok => {
+      if (!ok) return;
+      document.getElementById('month-filter').value = currentMonth();
+      document.getElementById('scope-filter').value = 'month';
+      handleScopeChange();
+      loadEvents();
+    });
+  </script>
+</body>
+</html>
