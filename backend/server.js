@@ -30,6 +30,18 @@ function normalizeStr(str) {
   return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 }
 
+function findExistingMatch(parsedEvent, existingEvents) {
+  const norm = normalizeStr(parsedEvent.event_name);
+  for (const e of existingEvents) {
+    if (e.event_key === parsedEvent.event_key) return e;
+    if (e.event_date !== parsedEvent.event_date) continue;
+    const existNorm = normalizeStr(e.event_name);
+    if (existNorm === norm) return e;
+    if (norm.includes(existNorm) || existNorm.includes(norm)) return e;
+  }
+  return null;
+}
+
 function buildEventKey(date, name, time) {
   return `${date}|${normalizeStr(name)}|${normalizeStr(time)}`;
 }
@@ -410,12 +422,19 @@ app.post('/api/admin/sync-movistar', async (req, res, next) => {
     if (!parsed.length) throw new Error('No se encontraron eventos en la cartelera de Movistar Arena.');
 
     const { data: existing, error: readError } = await supabase
-      .from('movistar_events').select('event_key, id');
+      .from('movistar_events').select('id, event_key, event_date, event_name');
     if (readError) throw readError;
-    const existingMap = new Map((existing || []).map(r => [r.event_key, r.id]));
 
-    const toInsert = parsed.filter(e => !existingMap.has(e.event_key));
-    const toUpdate = parsed.filter(e => existingMap.has(e.event_key) && e.image_url);
+    const toInsert = [];
+    const toUpdate = [];
+    for (const event of parsed) {
+      const match = findExistingMatch(event, existing || []);
+      if (match) {
+        if (event.image_url) toUpdate.push({ id: match.id, image_url: event.image_url });
+      } else {
+        toInsert.push(event);
+      }
+    }
 
     if (toInsert.length) {
       const { error } = await supabase.from('movistar_events').insert(toInsert);
@@ -423,14 +442,84 @@ app.post('/api/admin/sync-movistar', async (req, res, next) => {
     }
 
     let updatedCount = 0;
-    for (const event of toUpdate) {
+    for (const upd of toUpdate) {
       const { error } = await supabase.from('movistar_events')
-        .update({ image_url: event.image_url })
-        .eq('id', existingMap.get(event.event_key));
+        .update({ image_url: upd.image_url }).eq('id', upd.id);
       if (!error) updatedCount++;
     }
 
     res.json({ status: 'success', found: parsed.length, inserted: toInsert.length, updated: updatedCount });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/dedup-events', async (req, res, next) => {
+  try {
+    const { adminToken } = req.body || {};
+    if (!adminToken) throw Object.assign(new Error('adminToken es requerido.'), { status: 400 });
+
+    const { data: sessionData, error: sessionError } = await supabase
+      .rpc('movistar_admin_check_session', { p_token: adminToken });
+    const sessionResult = Array.isArray(sessionData) ? sessionData[0] : sessionData;
+    if (sessionError || !sessionResult?.ok) throw Object.assign(new Error('Sesión no válida.'), { status: 401 });
+
+    const { data: events, error: evErr } = await supabase
+      .from('movistar_events')
+      .select('id, event_date, event_name, start_time, image_url, created_at')
+      .order('event_date').order('created_at');
+    if (evErr) throw evErr;
+
+    const byDate = {};
+    for (const e of (events || [])) {
+      if (!byDate[e.event_date]) byDate[e.event_date] = [];
+      byDate[e.event_date].push(e);
+    }
+
+    let deleted = 0, imageUpdated = 0, skipped = 0;
+
+    for (const dayEvents of Object.values(byDate)) {
+      if (dayEvents.length < 2) continue;
+      const processed = new Set();
+
+      for (let i = 0; i < dayEvents.length; i++) {
+        if (processed.has(i)) continue;
+        const normI = normalizeStr(dayEvents[i].event_name);
+        const group = [dayEvents[i]];
+
+        for (let j = i + 1; j < dayEvents.length; j++) {
+          if (processed.has(j)) continue;
+          const normJ = normalizeStr(dayEvents[j].event_name);
+          if (normI.includes(normJ) || normJ.includes(normI)) {
+            group.push(dayEvents[j]);
+            processed.add(j);
+          }
+        }
+        processed.add(i);
+        if (group.length < 2) continue;
+
+        // group[0] is oldest (XLS import), keep it — group[1+] are duplicates from Movistar sync
+        const keeper = group[0];
+        for (const dup of group.slice(1)) {
+          const { count } = await supabase
+            .from('movistar_invitation_requests')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_id', dup.id);
+          if ((count || 0) > 0) { skipped++; continue; }
+
+          if (!keeper.image_url && dup.image_url) {
+            const { error: imgErr } = await supabase.from('movistar_events')
+              .update({ image_url: dup.image_url }).eq('id', keeper.id);
+            if (!imgErr) { keeper.image_url = dup.image_url; imageUpdated++; }
+          }
+
+          await supabase.from('movistar_events').delete().eq('id', dup.id);
+          deleted++;
+        }
+      }
+    }
+
+    res.json({ status: 'success', deleted, image_updated: imageUpdated, skipped });
   } catch (error) {
     next(error);
   }
