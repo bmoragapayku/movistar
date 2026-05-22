@@ -70,13 +70,21 @@
     </div>
 
     <section class="grid lg:grid-cols-[1.2fr_.8fr] gap-4 mb-5">
-      <div class="panel p-5">
-        <h2 class="font-headline text-lg font-extrabold text-[#310065] mb-4">Importar XLSX</h2>
-        <div class="flex flex-col md:flex-row gap-3">
-          <input id="event-file" type="file" accept=".xlsx,.xls" class="field">
-          <button id="import-btn" class="btn btn-primary" onclick="importEvents()"><span class="material-symbols-outlined text-lg">upload_file</span>Importar eventos</button>
+      <div class="panel p-5 flex flex-col gap-4">
+        <div>
+          <h2 class="font-headline text-lg font-extrabold text-[#310065] mb-4">Importar XLSX</h2>
+          <div class="flex flex-col md:flex-row gap-3">
+            <input id="event-file" type="file" accept=".xlsx,.xls" class="field">
+            <button id="import-btn" class="btn btn-primary" onclick="importEvents()"><span class="material-symbols-outlined text-lg">upload_file</span>Importar eventos</button>
+          </div>
+          <div id="import-result" class="mt-4 hidden rounded-lg border border-[#ded5e6] bg-[#fbf8ff] p-4 text-sm text-[#473d50]"></div>
         </div>
-        <div id="import-result" class="mt-4 hidden rounded-lg border border-[#ded5e6] bg-[#fbf8ff] p-4 text-sm text-[#473d50]"></div>
+        <div class="border-t border-[#ded5e6] pt-4">
+          <h2 class="font-headline text-lg font-extrabold text-[#310065] mb-2">Sincronizar desde Movistar Arena</h2>
+          <p class="text-sm text-[#625b6a] mb-3">Carga eventos e imágenes directamente desde movistararena.cl. Los eventos nuevos se agregan y los existentes actualizan su imagen.</p>
+          <button id="sync-btn" class="btn btn-primary w-full" onclick="syncMovistar()"><span class="material-symbols-outlined text-lg">sync</span>Cargar del Movistar</button>
+          <div id="sync-result" class="mt-3 hidden rounded-lg border border-[#ded5e6] bg-[#fbf8ff] p-4 text-sm text-[#473d50]"></div>
+        </div>
       </div>
 
       <div class="panel p-5">
@@ -112,6 +120,7 @@
         <table>
           <thead>
             <tr>
+              <th style="width:80px">Imagen</th>
               <th>Fecha</th>
               <th>Evento</th>
               <th>Inicio</th>
@@ -120,7 +129,7 @@
             </tr>
           </thead>
           <tbody id="events-body">
-            <tr><td colspan="5" class="text-[#625b6a]">Cargando eventos...</td></tr>
+            <tr><td colspan="6" class="text-[#625b6a]">Cargando eventos...</td></tr>
           </tbody>
         </table>
       </div>
@@ -132,6 +141,7 @@
   <script>
     const SUPABASE_URL = 'https://wlkwvzwxshbkwyeyhncd.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsa3d2end4c2hia3d5ZXlobmNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTExODgsImV4cCI6MjA5MTkyNzE4OH0.6w0wyItdfgBUxwdhSL5rSjRG51AA_-in82Sr6unp0VQ';
+    const MOVISTAR_AUTH_API = 'https://movistar-backend-production.up.railway.app/api';
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const ADMIN_SESSION_KEY = 'paykuMovistarAdminSession';
     let events = [];
@@ -348,6 +358,38 @@
       }
     }
 
+    async function syncMovistar() {
+      const session = getAdminSession();
+      const btn = document.getElementById('sync-btn');
+      const result = document.getElementById('sync-result');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined text-lg">hourglass_top</span>Sincronizando...';
+      result.classList.add('hidden');
+      try {
+        const res = await fetch(`${MOVISTAR_AUTH_API}/admin/sync-movistar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminToken: session.token })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || `Error ${res.status}`);
+        result.innerHTML = `
+          <div class="grid sm:grid-cols-3 gap-3">
+            <div><strong class="text-[#310065] text-xl">${data.found}</strong><br>Encontrados en Movistar</div>
+            <div><strong class="text-[#047857] text-xl">${data.inserted}</strong><br>Nuevos cargados</div>
+            <div><strong class="text-[#0369a1] text-xl">${data.updated}</strong><br>Imágenes actualizadas</div>
+          </div>`;
+        result.classList.remove('hidden');
+        toast(`Sincronización completa: ${data.inserted} nuevos, ${data.updated} actualizados.`);
+        await loadEvents();
+      } catch (error) {
+        toast(error.message || 'Error al sincronizar con Movistar Arena.', 'err');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined text-lg">sync</span>Cargar del Movistar';
+      }
+    }
+
     async function addManualEvent() {
       const date = document.getElementById('manual-date').value;
       const name = document.getElementById('manual-name').value.trim().replace(/\s+/g, ' ');
@@ -409,11 +451,16 @@
       document.getElementById('event-count').textContent = `${filtered.length} de ${events.length} eventos · ${scopeLabel}`;
       const body = document.getElementById('events-body');
       if (!filtered.length) {
-        body.innerHTML = '<tr><td colspan="5" class="text-[#625b6a]">No hay eventos para mostrar.</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="text-[#625b6a]">No hay eventos para mostrar.</td></tr>';
         return;
       }
       body.innerHTML = filtered.map(event => `
         <tr>
+          <td>
+            ${event.image_url
+              ? `<img src="${esc(event.image_url)}" alt="${esc(event.event_name)}" class="h-10 w-[72px] object-cover rounded" loading="lazy">`
+              : '<span class="material-symbols-outlined text-[#d8cfe0] text-3xl">image</span>'}
+          </td>
           <td class="font-bold text-[#310065] whitespace-nowrap">${formatDate(event.event_date)}</td>
           <td class="font-semibold">${esc(event.event_name)}</td>
           <td class="text-[#625b6a] whitespace-nowrap">${esc(event.start_time)}</td>

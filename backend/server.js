@@ -4,6 +4,7 @@ const cors = require('cors');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
+const { parse: parseHtml } = require('node-html-parser');
 
 const PORT = Number(process.env.PORT || 8787);
 const GOOGLE_AUTH_URL = process.env.GOOGLE_AUTH_URL || 'https://www.googleapis.com/oauth2/v3/userinfo';
@@ -17,6 +18,52 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGIN || 'http://localhost:8080')
   .map(origin => origin.trim())
   .filter(Boolean);
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
+
+const MOVISTAR_CARTELERA_URL = 'https://www.movistararena.cl/movistar/cartelera';
+const MOVISTAR_BASE = 'https://www.movistararena.cl';
+const MONTHS_ES = {
+  enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6,
+  julio:7, agosto:8, septiembre:9, octubre:10, noviembre:11, diciembre:12
+};
+
+function normalizeStr(str) {
+  return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+}
+
+function buildEventKey(date, name, time) {
+  return `${date}|${normalizeStr(name)}|${normalizeStr(time)}`;
+}
+
+function parseMovistarCard(card) {
+  const img = card.querySelector('img[src*="/movistar/site/artic/"]');
+  const heading = card.querySelector('h3') || card.querySelector('h2');
+  if (!heading) return null;
+
+  const name = heading.text.trim().replace(/\s+/g, ' ');
+  if (!name) return null;
+
+  const cardText = card.text;
+  const dateMatch = cardText.match(
+    /(\d{1,2})\s+(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s*\/\s*(\d{1,2}:\d{2})\s*hrs/i
+  );
+  if (!dateMatch) return null;
+
+  const day = parseInt(dateMatch[1], 10);
+  const monthNum = MONTHS_ES[dateMatch[2].toLowerCase()];
+  const timeRaw = dateMatch[3];
+  if (!monthNum) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let eventDate = new Date(now.getFullYear(), monthNum - 1, day);
+  if (eventDate < today) eventDate = new Date(now.getFullYear() + 1, monthNum - 1, day);
+
+  const date = `${eventDate.getFullYear()}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const time = `${timeRaw} HRS`;
+  const imageUrl = img ? `${MOVISTAR_BASE}${img.getAttribute('src')}` : null;
+
+  return { event_date: date, event_name: name, start_time: time, image_url: imageUrl };
+}
 
 function requireEnv(name, value) {
   if (!value || value === 'change-me') {
@@ -315,6 +362,75 @@ app.post('/api/admin/notify', async (req, res, next) => {
       parkings_sent: request.assigned_parkings,
       sent_at:       sentAt
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/sync-movistar', async (req, res, next) => {
+  try {
+    const { adminToken } = req.body || {};
+    if (!adminToken) throw Object.assign(new Error('adminToken es requerido.'), { status: 400 });
+
+    const { data: sessionData, error: sessionError } = await supabase
+      .rpc('movistar_admin_check_session', { p_token: adminToken });
+    const sessionResult = Array.isArray(sessionData) ? sessionData[0] : sessionData;
+    if (sessionError || !sessionResult?.ok) {
+      throw Object.assign(new Error('Sesión de administrador no válida.'), { status: 401 });
+    }
+
+    const pageRes = await fetch(MOVISTAR_CARTELERA_URL, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MovistarSync/1.0)' }
+    });
+    if (!pageRes.ok) throw new Error(`No se pudo obtener la cartelera de Movistar (HTTP ${pageRes.status}).`);
+    const html = await pageRes.text();
+    const root = parseHtml(html);
+
+    const parsed = [];
+    const seen = new Set();
+
+    const verMasLinks = root.querySelectorAll('a[href*="/nuestra-cartelera/conciertos/"]');
+    for (const link of verMasLinks) {
+      if (!link.text.trim().toLowerCase().includes('ver')) continue;
+      let card = link.parentNode;
+      let depth = 0;
+      while (card && !card.querySelector('img[src*="/movistar/site/artic/"]') && depth < 6) {
+        card = card.parentNode;
+        depth++;
+      }
+      if (!card) continue;
+      const eventData = parseMovistarCard(card);
+      if (!eventData) continue;
+      const key = buildEventKey(eventData.event_date, eventData.event_name, eventData.start_time);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      parsed.push({ ...eventData, event_key: key });
+    }
+
+    if (!parsed.length) throw new Error('No se encontraron eventos en la cartelera de Movistar Arena.');
+
+    const { data: existing, error: readError } = await supabase
+      .from('movistar_events').select('event_key, id');
+    if (readError) throw readError;
+    const existingMap = new Map((existing || []).map(r => [r.event_key, r.id]));
+
+    const toInsert = parsed.filter(e => !existingMap.has(e.event_key));
+    const toUpdate = parsed.filter(e => existingMap.has(e.event_key) && e.image_url);
+
+    if (toInsert.length) {
+      const { error } = await supabase.from('movistar_events').insert(toInsert);
+      if (error) throw error;
+    }
+
+    let updatedCount = 0;
+    for (const event of toUpdate) {
+      const { error } = await supabase.from('movistar_events')
+        .update({ image_url: event.image_url })
+        .eq('id', existingMap.get(event.event_key));
+      if (!error) updatedCount++;
+    }
+
+    res.json({ status: 'success', found: parsed.length, inserted: toInsert.length, updated: updatedCount });
   } catch (error) {
     next(error);
   }

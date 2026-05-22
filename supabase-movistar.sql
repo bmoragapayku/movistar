@@ -241,3 +241,6 @@ GRANT EXECUTE ON FUNCTION movistar_admin_logout(text) TO anon, authenticated;
 
 -- Fuerza a la API REST de Supabase/PostgREST a refrescar el schema cache.
 NOTIFY pgrst, 'reload schema';
+
+-- Migración: columna image_url en movistar_events (ejecutar si ya existe la tabla)
+ALTER TABLE movistar_events ADD COLUMN IF NOT EXISTS image_url text;
