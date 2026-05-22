@@ -51,9 +51,4 @@ El backend valida el access token contra Google, exige email verificado y domini
 
 Para hosting público, cambia `MOVISTAR_AUTH_API` en `index.html` a la URL publicada del backend y configura `CORS_ORIGIN` con el dominio donde estará alojado el HTML.
 
-## Acceso admin
 
-Las páginas `eventos.html`, `trabajadores.html`, `ranking.html` y `admin.html` requieren login.
-
-- Correo: `andrea@payku.com`
-- Contraseña: `Events9649`
