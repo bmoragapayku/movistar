@@ -38,6 +38,15 @@
     td { border-top:1px solid #eee7f3; padding:12px; font-size:13px; vertical-align:middle; }
     tr:hover td { background:#fcf8ff; }
     .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:800; color:#53475d; background:#f3eef7; }
+    .pill-ok { color:#047857; background:#dcfce7; }
+    .pill-bad { color:#ba1a1a; background:#fee2e2; }
+    .pill-muted { color:#625b6a; background:#f3eef7; }
+    .detail-row { display:none; }
+    .detail-row.open { display:table-row; }
+    .ev-detail-card { display:flex; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--line); background:white; align-items:center; }
+    .ev-detail-card.missed { border-color:#fecaca; background:#fff7f7; }
+    .ev-detail-thumb { width:60px; min-width:60px; height:38px; border-radius:4px; object-fit:cover; display:block; }
+    .ev-detail-thumb-ph { width:60px; min-width:60px; height:38px; border-radius:4px; background:linear-gradient(135deg,#310065,#7d4bb2); display:flex; align-items:center; justify-content:center; }
     .toast { position:fixed; right:18px; bottom:18px; max-width:380px; z-index:30; border-radius:8px; padding:13px 14px; box-shadow:0 18px 45px rgba(20,10,30,.18); font-size:13px; font-weight:800; display:none; }
     .toast.show { display:block; }
     .toast.err { background:#fef2f2; color:#ba1a1a; border:1px solid #fecaca; }
@@ -69,7 +78,7 @@
         <p class="mt-2 text-sm text-[#625b6a] max-w-3xl">Vista ordenada por entradas solicitadas en solicitudes activas. Puedes revisar el mes actual o el historial completo.</p>
       </div>
       <div class="panel p-3 flex flex-wrap items-center gap-2">
-        <select id="scope-filter" class="field w-full sm:w-36" onchange="handleScopeChange()">
+        <select id="scope-filter" class="field w-full sm:w-36" style="height:42px" onchange="handleScopeChange()">
           <option value="month">Por mes</option>
           <option value="all">Todos</option>
         </select>
@@ -213,6 +222,10 @@
       });
     }
 
+    function formatDate(iso) {
+      return new Date(`${iso}T12:00:00`).toLocaleDateString('es-CL', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+    }
+
     function buildRanking() {
       const search = normalizeText(document.getElementById('worker-search').value);
       const map = new Map();
@@ -221,14 +234,12 @@
         const name = row.worker?.name || 'Sin trabajador';
         if (!map.has(workerId)) {
           map.set(workerId, {
-            workerId,
-            name,
-            requestedTickets: 0,
-            requestedParkings: 0,
-            assignedTickets: 0,
-            assignedParkings: 0,
-            requests: 0,
-            events: new Set()
+            workerId, name,
+            requestedTickets: 0, requestedParkings: 0,
+            assignedTickets: 0, assignedParkings: 0,
+            missedEvents: 0,
+            events: new Set(),
+            rawRequests: []
           });
         }
         const item = map.get(workerId);
@@ -236,8 +247,9 @@
         item.requestedParkings += Number(row.requested_parkings) || 0;
         item.assignedTickets += Number(row.assigned_tickets) || 0;
         item.assignedParkings += Number(row.assigned_parkings) || 0;
-        item.requests += 1;
+        if (row.attended === false) item.missedEvents++;
         if (row.event_id) item.events.add(row.event_id);
+        item.rawRequests.push(row);
       });
 
       return [...map.values()]
@@ -262,14 +274,14 @@
     function renderTopThree(ranking) {
       const wrap = document.getElementById('top-three');
       const top = ranking.slice(0, 3);
-      if (!top.length) {
-        wrap.innerHTML = '';
-        return;
-      }
+      if (!top.length) { wrap.innerHTML = ''; return; }
       const max = Math.max(1, top[0].requestedTickets);
       wrap.innerHTML = top.map((item, index) => {
         const badge = index === 1 ? 'second' : index === 2 ? 'third' : '';
         const pct = Math.round((item.requestedTickets / max) * 100);
+        const missedHtml = item.missedEvents > 0
+          ? `<span class="pill pill-bad text-xs mt-2 inline-flex"><span class="material-symbols-outlined text-sm">person_off</span>${item.missedEvents} inasistencia${item.missedEvents > 1 ? 's' : ''}</span>`
+          : '';
         return `
           <article class="rank-card">
             <div class="flex items-start justify-between gap-3">
@@ -280,8 +292,44 @@
             <p class="text-sm text-[#625b6a] mt-1">${item.requestedTickets} entradas solicitadas · ${item.requestedParkings} estacionamientos</p>
             <div class="bar mt-4"><span style="width:${pct}%"></span></div>
             <p class="text-xs font-bold text-[#625b6a] mt-3">${item.assignedTickets} entradas asignadas por admin</p>
+            ${missedHtml}
           </article>`;
       }).join('');
+    }
+
+    function attendedPill(attended) {
+      if (attended === true)  return '<span class="pill pill-ok"><span class="material-symbols-outlined text-sm">check_circle</span>Asistió</span>';
+      if (attended === false) return '<span class="pill pill-bad"><span class="material-symbols-outlined text-sm">cancel</span>No asistió</span>';
+      return '<span class="pill pill-muted"><span class="material-symbols-outlined text-sm">help</span>Sin registro</span>';
+    }
+
+    function eventDetailCard(req) {
+      const ev = req.event || {};
+      const missed = req.attended === false;
+      const thumb = ev.image_url
+        ? `<img src="${esc(ev.image_url)}" class="ev-detail-thumb" loading="lazy">`
+        : `<div class="ev-detail-thumb-ph"><span class="material-symbols-outlined text-white/30 text-xl">music_note</span></div>`;
+      return `
+        <div class="ev-detail-card ${missed ? 'missed' : ''}">
+          ${thumb}
+          <div class="min-w-0 flex-1 flex flex-wrap items-center gap-x-4 gap-y-0.5">
+            <p class="font-extrabold text-sm text-[#310065] leading-tight">${esc(ev.event_name || '—')}</p>
+            <p class="text-xs text-[#625b6a]">${ev.event_date ? formatDate(ev.event_date) : ''}${ev.start_time ? ' · ' + esc(ev.start_time) : ''}</p>
+            <span class="text-xs font-bold text-[#473d50]">Entradas: <strong>${req.assigned_tickets}/${req.requested_tickets}</strong></span>
+            <span class="text-xs font-bold text-[#473d50]">Estac.: <strong>${req.assigned_parkings}/${req.requested_parkings}</strong></span>
+            ${attendedPill(req.attended)}
+          </div>
+        </div>`;
+    }
+
+    function toggleDetail(id) {
+      const row = document.getElementById('detail-' + id);
+      const btn = document.getElementById('btn-' + id);
+      if (!row) return;
+      const isOpen = row.classList.toggle('open');
+      btn.innerHTML = isOpen
+        ? '<span class="material-symbols-outlined text-base">expand_less</span>Ocultar'
+        : '<span class="material-symbols-outlined text-base">expand_more</span>Ver detalle';
     }
 
     function renderTable(ranking) {
@@ -294,38 +342,51 @@
         return;
       }
       const max = Math.max(1, ranking[0].requestedTickets);
+      const rows = ranking.map((item, index) => {
+        const pct = Math.round((item.requestedTickets / max) * 100);
+        const hasMissed = item.missedEvents > 0;
+        const safeId = CSS.escape ? CSS.escape(item.workerId) : item.workerId.replace(/[^a-z0-9]/gi, '_');
+        const nameCell = hasMissed
+          ? `<div class="font-bold text-[#ba1a1a]">${esc(item.name)}</div><div class="text-xs text-[#ba1a1a] font-bold mt-0.5 flex items-center gap-1"><span class="material-symbols-outlined text-sm">person_off</span>${item.missedEvents} inasistencia${item.missedEvents > 1 ? 's' : ''}</div>`
+          : `<div class="font-bold text-[#310065]">${esc(item.name)}</div>`;
+        return `
+          <tr>
+            <td class="font-extrabold text-[#310065]">#${index + 1}</td>
+            <td>${nameCell}</td>
+            <td>
+              <div class="font-extrabold text-[#1d1a21]">${item.requestedTickets}</div>
+              <div class="bar mt-2 max-w-[200px]"><span style="width:${pct}%"></span></div>
+            </td>
+            <td>${item.eventsCount}</td>
+            <td>${item.requestedParkings}</td>
+            <td>${item.assignedTickets}</td>
+            <td>${item.assignedParkings}</td>
+            <td>
+              <button id="btn-${item.workerId}" class="btn btn-ghost text-xs py-1.5 px-2.5" onclick="toggleDetail('${item.workerId}')">
+                <span class="material-symbols-outlined text-base">expand_more</span>Ver detalle
+              </button>
+            </td>
+          </tr>
+          <tr id="detail-${item.workerId}" class="detail-row">
+            <td colspan="8" style="padding:10px 16px; background:#faf7fc;">
+              <div class="flex flex-col gap-2">
+                ${item.rawRequests.sort((a,b) => (a.event?.event_date||'').localeCompare(b.event?.event_date||'')).map(eventDetailCard).join('')}
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+
       target.innerHTML = `
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Trabajador</th>
-                <th>Entradas solicitadas</th>
-                <th>Eventos</th>
-                <th>Estac. solicitados</th>
-                <th>Entradas asignadas</th>
-                <th>Estac. asignados</th>
+                <th>#</th><th>Trabajador</th><th>Entradas solicitadas</th>
+                <th>Eventos</th><th>Estac. solicitados</th>
+                <th>Entradas asignadas</th><th>Estac. asignados</th><th></th>
               </tr>
             </thead>
-            <tbody>
-              ${ranking.map((item, index) => {
-                const pct = Math.round((item.requestedTickets / max) * 100);
-                return `
-                  <tr>
-                    <td class="font-extrabold text-[#310065]">#${index + 1}</td>
-                    <td class="font-bold text-[#310065]">${esc(item.name)}</td>
-                    <td>
-                      <div class="font-extrabold text-[#1d1a21]">${item.requestedTickets}</div>
-                      <div class="bar mt-2 max-w-[240px]"><span style="width:${pct}%"></span></div>
-                    </td>
-                    <td>${item.eventsCount}</td>
-                    <td>${item.requestedParkings}</td>
-                    <td>${item.assignedTickets}</td>
-                    <td>${item.assignedParkings}</td>
-                  </tr>`;
-              }).join('')}
-            </tbody>
+            <tbody>${rows}</tbody>
           </table>
         </div>`;
     }
@@ -342,7 +403,7 @@
       try {
         const { data, error } = await db
           .from('movistar_invitation_requests')
-          .select('id,event_id,worker_id,requested_tickets,requested_parkings,assigned_tickets,assigned_parkings,status,created_at,worker:movistar_workers(id,name),event:movistar_events(id,event_date,event_name,start_time,is_cancelled)')
+          .select('id,event_id,worker_id,requested_tickets,requested_parkings,assigned_tickets,assigned_parkings,attended,status,created_at,worker:movistar_workers(id,name),event:movistar_events(id,event_date,event_name,start_time,image_url,is_cancelled)')
           .eq('status', 'active');
         if (error) throw error;
         allRequests = data || [];

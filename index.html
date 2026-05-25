@@ -166,8 +166,9 @@
     const SUPABASE_URL = 'https://wlkwvzwxshbkwyeyhncd.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsa3d2end4c2hia3d5ZXlobmNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTExODgsImV4cCI6MjA5MTkyNzE4OH0.6w0wyItdfgBUxwdhSL5rSjRG51AA_-in82Sr6unp0VQ';
     const GOOGLE_CLIENT_ID = '102995165997-qiqv5602n7nfkfg0fh5fcscjcq2hsn31.apps.googleusercontent.com';
-    const MOVISTAR_AUTH_API = 'https://movistar-backend-production.up.railway.app/api';
-    //const MOVISTAR_AUTH_API = 'http://localhost:8787/api';
+    const MOVISTAR_AUTH_API = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+      ? 'http://localhost:8787/api'
+      : 'https://movistar-backend-production.up.railway.app/api';
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const ADMIN_SESSION_KEY = 'paykuMovistarAdminSession';
     const USER_SESSION_KEY = 'paykuMovistarUserSession';

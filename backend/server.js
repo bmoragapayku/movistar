@@ -13,6 +13,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const MAIL_FROM = process.env.MAIL_FROM || 'Movistar Arena <onboarding@resend.dev>';
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || '';
 const CORS_ORIGINS = String(process.env.CORS_ORIGIN || 'http://localhost:8080')
   .split(',')
   .map(origin => origin.trim())
@@ -299,6 +300,53 @@ function buildEmailHtml({ worker, event, assigned_tickets, assigned_parkings }) 
 </html>`;
 }
 
+function buildSlackBlocks({ worker, event, assigned_tickets, assigned_parkings }) {
+  const eventDate = event?.event_date
+    ? new Date(`${event.event_date}T12:00:00`).toLocaleDateString('es-CL', { weekday:'long', day:'2-digit', month:'long', year:'numeric' })
+    : '';
+  const parts = [];
+  if (assigned_tickets > 0) parts.push(`*${assigned_tickets}* ${assigned_tickets === 1 ? 'entrada' : 'entradas'}`);
+  if (assigned_parkings > 0) parts.push(`*${assigned_parkings}* ${assigned_parkings === 1 ? 'estacionamiento' : 'estacionamientos'}`);
+  const assignedText = parts.length ? parts.join(' · ') : '_sin asignación_';
+  return [
+    { type: 'header', text: { type: 'plain_text', text: `🎵 ${event?.event_name || 'Evento'} · Movistar Arena`, emoji: true } },
+    { type: 'section', text: { type: 'mrkdwn', text: `Hola *${worker?.name || ''}*, el administrador confirmó tu asignación para este evento.` } },
+    { type: 'section', fields: [
+      { type: 'mrkdwn', text: `*Fecha*\n${eventDate}` },
+      { type: 'mrkdwn', text: `*Hora*\n${event?.start_time || '—'}` },
+      { type: 'mrkdwn', text: `*Asignado*\n${assignedText}` }
+    ]},
+    { type: 'divider' },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: 'Payku · Movistar Arena — notificación automática' }] }
+  ];
+}
+
+async function sendSlackDm(email, blocks, fallbackText) {
+  if (!SLACK_BOT_TOKEN) return { ok: false, error: 'no_token' };
+
+  const userRes = await fetch(`https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(email)}`, {
+    headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` }
+  });
+  const userData = await userRes.json();
+  if (!userData.ok) return { ok: false, error: userData.error };
+
+  const dmRes = await fetch('https://slack.com/api/conversations.open', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ users: userData.user.id })
+  });
+  const dmData = await dmRes.json();
+  if (!dmData.ok) return { ok: false, error: dmData.error };
+
+  const msgRes = await fetch('https://slack.com/api/chat.postMessage', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: dmData.channel.id, text: fallbackText, blocks })
+  });
+  const msgData = await msgRes.json();
+  return { ok: msgData.ok, error: msgData.error };
+}
+
 app.post('/api/admin/notify', async (req, res, next) => {
   try {
     const { adminToken, requestId } = req.body || {};
@@ -332,30 +380,42 @@ app.post('/api/admin/notify', async (req, res, next) => {
       throw Object.assign(new Error('RESEND_API_KEY no configurado en el backend.'), { status: 500 });
     }
 
-    const emailRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: MAIL_FROM,
-        to: [workerEmail],
-        subject: `Tus entradas para ${request.event?.event_name || 'el evento'} · Movistar Arena`,
-        html: buildEmailHtml({
-          worker: request.worker,
-          event: request.event,
-          assigned_tickets: request.assigned_tickets,
-          assigned_parkings: request.assigned_parkings
-        })
-      })
+    const slackBlocks = buildSlackBlocks({
+      worker: request.worker,
+      event: request.event,
+      assigned_tickets: request.assigned_tickets,
+      assigned_parkings: request.assigned_parkings
     });
+    const slackFallback = `Tus entradas para ${request.event?.event_name || 'el evento'} han sido confirmadas.`;
+
+    const [emailRes, slackResult] = await Promise.all([
+      fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: MAIL_FROM,
+          to: [workerEmail],
+          subject: `Tus entradas para ${request.event?.event_name || 'el evento'} · Movistar Arena`,
+          html: buildEmailHtml({
+            worker: request.worker,
+            event: request.event,
+            assigned_tickets: request.assigned_tickets,
+            assigned_parkings: request.assigned_parkings
+          })
+        })
+      }),
+      sendSlackDm(workerEmail, slackBlocks, slackFallback).catch(err => ({ ok: false, error: err.message }))
+    ]);
 
     if (!emailRes.ok) {
       const emailErr = await emailRes.json().catch(() => ({}));
       throw new Error(emailErr.message || `Error Resend ${emailRes.status}`);
     }
 
+    const slackSent = slackResult.ok === true;
     const sentAt = new Date().toISOString();
     const { error: logError } = await supabase.from('movistar_notification_log').insert({
       request_id:    requestId,
@@ -363,7 +423,8 @@ app.post('/api/admin/notify', async (req, res, next) => {
       worker_id:     request.worker_id,
       sent_to:       workerEmail,
       tickets_sent:  request.assigned_tickets,
-      parkings_sent: request.assigned_parkings
+      parkings_sent: request.assigned_parkings,
+      slack_sent:    slackSent
     });
     if (logError) throw new Error(`Correo enviado pero no se pudo guardar el registro: ${logError.message}`);
 
@@ -372,7 +433,9 @@ app.post('/api/admin/notify', async (req, res, next) => {
       sent_to:       workerEmail,
       tickets_sent:  request.assigned_tickets,
       parkings_sent: request.assigned_parkings,
-      sent_at:       sentAt
+      sent_at:       sentAt,
+      slack_sent:    slackSent,
+      slack_error:   slackSent ? undefined : (slackResult.error || 'unknown')
     });
   } catch (error) {
     next(error);
