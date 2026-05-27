@@ -511,7 +511,21 @@ app.post('/api/admin/sync-movistar', async (req, res, next) => {
       if (!error) updatedCount++;
     }
 
-    res.json({ status: 'success', found: parsed.length, inserted: toInsert.length, updated: updatedCount });
+    // Reemplazar log temporal con los eventos nuevos de este sync
+    await supabase.from('movistar_sync_log').delete().not('id', 'is', null);
+    if (toInsert.length) {
+      await supabase.from('movistar_sync_log').insert(
+        toInsert.map(e => ({ event_name: e.event_name, event_date: e.event_date, start_time: e.start_time }))
+      );
+    }
+
+    res.json({
+      status: 'success',
+      found: parsed.length,
+      inserted: toInsert.length,
+      updated: updatedCount,
+      new_events: toInsert.map(e => ({ event_name: e.event_name, event_date: e.event_date, start_time: e.start_time }))
+    });
   } catch (error) {
     next(error);
   }

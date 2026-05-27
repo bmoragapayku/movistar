@@ -81,7 +81,7 @@
         </div>
         <div class="border-t border-[#ded5e6] pt-4">
           <h2 class="font-headline text-lg font-extrabold text-[#310065] mb-2">Sincronizar desde Movistar Arena</h2>
-          <p class="text-sm text-[#625b6a] mb-3">Carga eventos e imágenes directamente desde movistararena.cl. Los eventos nuevos se agregan y los existentes actualizan su imagen.</p>
+          <p class="text-sm text-[#625b6a] mb-3">Carga eventos directamente desde movistararena.cl</p>
           <div class="flex flex-col sm:flex-row gap-2">
             <button id="sync-btn" class="btn btn-primary flex-1" onclick="syncMovistar()"><span class="material-symbols-outlined text-lg">sync</span>Cargar del Movistar</button>
             <button id="dedup-btn" class="btn btn-ghost" onclick="dedupEvents()" title="Elimina eventos duplicados manteniendo el original"><span class="material-symbols-outlined text-lg">auto_fix_high</span>Limpiar duplicados</button>
@@ -396,6 +396,32 @@
       }
     }
 
+    async function loadSyncLog() {
+      const result = document.getElementById('sync-result');
+      const { data, error } = await db
+        .from('movistar_sync_log')
+        .select('*')
+        .order('event_date', { ascending: true });
+      if (error || !data || data.length === 0) return;
+      const syncedAt = new Date(data[0].synced_at);
+      const syncedAtStr = syncedAt.toLocaleString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      result.innerHTML = `
+        <p class="text-xs text-[#625b6a] mb-3">Última sincronización: <strong>${syncedAtStr}</strong> · ${data.length} evento${data.length !== 1 ? 's' : ''} nuevo${data.length !== 1 ? 's' : ''}</p>
+        <p class="font-semibold text-[#310065] mb-2 text-xs uppercase tracking-widest">Eventos nuevos cargados</p>
+        <ul class="space-y-1">
+          ${data.map(e => {
+            const d = new Date(e.event_date + 'T12:00:00');
+            const fecha = d.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const hora = e.start_time ? ` · ${e.start_time}` : '';
+            return `<li class="flex items-center gap-2 text-sm">
+              <span class="material-symbols-outlined text-[#047857] text-base">event_available</span>
+              <span><strong>${esc(e.event_name)}</strong> <span class="text-[#625b6a]">${fecha}${hora}</span></span>
+            </li>`;
+          }).join('')}
+        </ul>`;
+      result.classList.remove('hidden');
+    }
+
     async function syncMovistar() {
       const session = getAdminSession();
       const btn = document.getElementById('sync-btn');
@@ -411,12 +437,31 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || `Error ${res.status}`);
+        const newEventsHtml = data.new_events && data.new_events.length
+          ? `<div class="mt-4 border-t border-[#ded5e6] pt-3">
+              <p class="font-semibold text-[#310065] mb-2 text-xs uppercase tracking-widest">Eventos nuevos cargados</p>
+              <ul class="space-y-1">
+                ${data.new_events.map(e => {
+                  const d = new Date(e.event_date + 'T12:00:00');
+                  const fecha = d.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                  const hora = e.start_time ? ` · ${e.start_time}` : '';
+                  return `<li class="flex items-center gap-2 text-sm">
+                    <span class="material-symbols-outlined text-[#047857] text-base">event_available</span>
+                    <span><strong>${e.event_name}</strong> <span class="text-[#625b6a]">${fecha}${hora}</span></span>
+                  </li>`;
+                }).join('')}
+              </ul>
+            </div>`
+          : data.inserted === 0
+            ? `<div class="mt-3 text-sm text-[#625b6a]">No hay eventos nuevos — la cartelera ya estaba al día.</div>`
+            : '';
         result.innerHTML = `
           <div class="grid sm:grid-cols-3 gap-3">
             <div><strong class="text-[#310065] text-xl">${data.found}</strong><br>Encontrados en Movistar</div>
             <div><strong class="text-[#047857] text-xl">${data.inserted}</strong><br>Nuevos cargados</div>
             <div><strong class="text-[#0369a1] text-xl">${data.updated}</strong><br>Imágenes actualizadas</div>
-          </div>`;
+          </div>
+          ${newEventsHtml}`;
         result.classList.remove('hidden');
         toast(`Sincronización completa: ${data.inserted} nuevos, ${data.updated} actualizados.`);
         await loadEvents();
@@ -518,6 +563,7 @@
       document.getElementById('scope-filter').value = 'month';
       handleScopeChange();
       loadEvents();
+      loadSyncLog();
     });
   </script>
 </body>

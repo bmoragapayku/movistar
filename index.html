@@ -75,7 +75,7 @@
       <div>
         <p class="text-xs font-extrabold uppercase tracking-[.18em] text-[#008f8f] mb-2">Solicitudes</p>
         <h1 class="font-headline text-3xl font-extrabold text-[#310065]">Registro a eventos</h1>
-        <p class="mt-2 text-sm text-[#625b6a] max-w-2xl">Inicia sesión con tu correo Payku, elige eventos del mes en curso y registra cuántas entradas o estacionamientos quieres solicitar. Cada campo permite máximo 12.</p>
+        <p class="mt-2 text-sm text-[#625b6a] max-w-2xl">Inicia sesión con tu correo Payku, elige eventos y registra cuántas entradas o estacionamientos quieres solicitar.</p>
       </div>
       <button class="btn btn-ghost" onclick="loadBaseData()"><span class="material-symbols-outlined text-lg">refresh</span>Actualizar</button>
     </div>
@@ -85,7 +85,7 @@
         <div>
           <p class="text-xs font-extrabold uppercase tracking-widest text-[#008f8f] mb-1">Acceso</p>
           <h2 class="font-headline text-lg font-extrabold text-[#310065]">Ingresa con tu cuenta Payku</h2>
-          <p class="text-sm text-[#625b6a] mt-1">Inicia sesión con tu correo Payku asociado a un trabajador autorizado.</p>
+          <p class="text-sm text-[#625b6a] mt-1">Inicia sesión con tu correo.</p>
         </div>
         <button id="google-login-btn" class="btn btn-primary" onclick="requestGoogleLogin()">
           <span class="material-symbols-outlined text-lg">login</span>Iniciar sesión con Google
@@ -152,7 +152,6 @@
         <div class="mb-5">
           <p class="text-xs font-extrabold uppercase tracking-[.18em] text-[#008f8f] mb-1">Mi resumen</p>
           <h2 class="font-headline text-lg font-extrabold text-[#310065]">Mis solicitudes del mes</h2>
-          <p class="text-sm text-[#625b6a] mt-1">Lo que pediste vs. lo que el administrador confirmó.</p>
         </div>
         <div id="summary-totals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
         <div id="summary-table"></div>
